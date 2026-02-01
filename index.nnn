@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Мій Бюджет">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/10433/10433048.png">
+    <title>FinanceApp Pro</title>
+    <style>
+        :root {
+            --ios-blue: #007aff; --ios-green: #34c759; --ios-red: #ff3b30; --ios-gray: #8e8e93;
+            --bg: #f2f2f7; --card-bg: #ffffff; --text-main: #000000; --nav-bg: rgba(255,255,255,0.9); --border: #d1d1d6;
+        }
+        [data-theme="dark"] {
+            --bg: #000000; --card-bg: #1c1c1e; --text-main: #ffffff; --nav-bg: rgba(28,28,30,0.9); --border: #38383a;
+        }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--text-main); transition: 0.3s; -webkit-tap-highlight-color: transparent; }
+        .tab-content { display: none; padding: 20px; padding-top: 40px; padding-bottom: 110px; }
+        .active { display: block !important; }
+        .card { background: var(--card-bg); padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; text-align: center; }
+        .balance-val { font-size: 38px; font-weight: 800; margin: 10px 0; }
+        .type-selector { display: flex; gap: 10px; margin-bottom: 20px; }
+        .type-btn { flex: 1; padding: 15px; border: none; border-radius: 12px; font-weight: bold; background: #e5e5ea; color: #8e8e93; cursor: pointer; }
+        .active-exp { background: var(--ios-red) !important; color: white !important; }
+        .active-inc { background: var(--ios-green) !important; color: white !important; }
+        input, select { width: 100%; padding: 15px; margin: 8px 0; border: 1px solid var(--border); border-radius: 12px; font-size: 16px; background: var(--card-bg); color: var(--text-main); box-sizing: border-box; outline: none; }
+        .btn-save { background: var(--ios-blue); color: white; border: none; width: 100%; padding: 18px; border-radius: 15px; font-weight: bold; font-size: 18px; cursor: pointer; }
+        .history-item { background: var(--card-bg); padding: 15px; border-radius: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid transparent; }
+        nav { position: fixed; bottom: 0; width: 100%; background: var(--nav-bg); backdrop-filter: blur(15px); display: flex; border-top: 0.5px solid var(--border); height: 85px; padding-bottom: env(safe-area-inset-bottom); z-index: 1000; }
+        nav button { flex: 1; border: none; background: none; font-size: 11px; color: var(--ios-gray); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        nav button.active-nav { color: var(--ios-blue); }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
+        /* Switch UI */
+        .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--ios-green); }
+        input:checked + .slider:before { transform: translateX(22px); }
+    </style>
+</head>
+<body data-theme="light">
+    <div id="home" class="tab-content active">
+        <div class="card">
+            <div style="color: var(--ios-gray);">Баланс</div>
+            <div class="balance-val"><span id="totalBalance">0</span> ₴</div>
+        </div>
+        <div class="type-selector">
+            <button id="btnExp" class="type-btn active-exp" onclick="setType('exp')">Витрати</button>
+            <button id="btnInc" class="type-btn" onclick="setType('inc')">Доходи</button>
+        </div>
+        <input type="number" id="amount" placeholder="Сума ₴" inputmode="decimal">
+        <select id="catSelect"><option>🛒 Магазин</option><option>🚗 Транспорт</option><option>🍕 Їжа</option><option>💰 Зарплата</option></select>
+        <button class="btn-save" onclick="saveData()">Зберегти</button>
+    </div>
+    <div id="history" class="tab-content"><h2>Історія</h2><div id="listHistory"></div></div>
+    <div id="settings" class="tab-content">
+        <h2>Налаштування</h2>
+        <div class="card">
+            <div class="toggle-row"><span>Темна тема</span><label class="switch"><input type="checkbox" id="themeToggle" onclick="toggleTheme()"><span class="slider"></span></label></div>
+            <button onclick="clearAllData()" style="color: var(--ios-red); border: none; background: none; margin-top: 20px; cursor: pointer;">🗑 Видалити дані</button>
+        </div>
+    </div>
+    <nav>
+        <button onclick="showTab('home')" id="nav-home" class="active-nav">🏠<br>Головна</button>
+        <button onclick="showTab('history')" id="nav-history">📊<br>Історія</button>
+        <button onclick="showTab('settings')" id="nav-settings">⚙️<br>Налаштування</button>
+    </nav>
+
+    <script>
+        let db = JSON.parse(localStorage.getItem('finance_v7')) || [];
+        let currentType = 'exp';
+
+        function setType(t) {
+            currentType = t;
+            document.getElementById('btnExp').className = 'type-btn' + (t==='exp' ? ' active-exp' : '');
+            document.getElementById('btnInc').className = 'type-btn' + (t==='inc' ? ' active-inc' : '');
+        }
+
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-nav'));
+            document.getElementById('nav-' + id).classList.add('active-nav');
+            if(id === 'history') renderHistory();
+        }
+
+        function saveData() {
+            const amt = document.getElementById('amount').value;
+            if(!amt) return;
+            db.unshift({ amount: parseFloat(amt), category: document.getElementById('catSelect').value, type: currentType, time: new Date().toLocaleString() });
+            localStorage.setItem('finance_v7', JSON.stringify(db));
+            document.getElementById('amount').value = '';
+            updateBalance();
+            alert('Збережено!');
+        }
+
+        function updateBalance() {
+            let total = 0;
+            db.forEach(i => total += (i.type === 'inc' ? i.amount : -i.amount));
+            document.getElementById('totalBalance').innerText = total.toFixed(2);
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('listHistory');
+            container.innerHTML = db.map(i => `
+                <div class="history-item" style="border-left-color: ${i.type==='inc'?'var(--ios-green)':'var(--ios-red)'}">
+                    <div><strong>${i.category}</strong><br><small>${i.time}</small></div>
+                    <div style="color: ${i.type==='inc'?'var(--ios-green)':'var(--ios-red)'}">${i.type==='inc'?'+':'-'}${i.amount} ₴</div>
+                </div>`).join('');
+        }
+
+        function toggleTheme() {
+            const theme = document.getElementById('themeToggle').checked ? 'dark' : 'light';
+            document.body.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+
+        function clearAllData() { if(confirm('Видалити все?')) { localStorage.removeItem('finance_v7'); db = []; updateBalance(); renderHistory(); } }
+
+        // Инициализация
+        updateBalance();
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.body.setAttribute('data-theme', savedTheme);
+        document.getElementById('themeToggle').checked = (savedTheme === 'dark');
+
+        // Регистрация Service Worker для оффлайна
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(() => console.log('Offline Ready'));
+            });
+        }
+    </script>
+</body>
+</html>
